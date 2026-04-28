@@ -30,11 +30,9 @@ def main():
     blocker = Blocker()
     notifier = Notifier(config)
 
-    # Placeholder for unbanner — assigned after creation
     unbanner_ref = [None]
 
     def on_ip_anomaly(ip: str, rate: float, mean: float, condition: str):
-        """Called when a per-IP anomaly is detected."""
         unbanner = unbanner_ref[0]
         count = unbanner.ban_counts.get(ip, 0) if unbanner else 0
         schedule = config["unban_schedule"]
@@ -55,7 +53,6 @@ def main():
             )
 
     def on_global_anomaly(rate: float, mean: float, condition: str):
-        """Called when a global traffic anomaly is detected."""
         print(f"[main] Global anomaly: {condition}")
         notifier.send_global_alert(rate, mean, condition)
         audit_logger.log(
@@ -78,6 +75,7 @@ def main():
 
     def handle_entry(entry: dict):
         """Process each parsed log entry."""
+        print(f"[main] Entry: {entry['source_ip']}")
         now = time.time()
         is_error = entry["status"] >= 400
         baseline.record_request(now, is_error)

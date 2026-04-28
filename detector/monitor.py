@@ -1,59 +1,57 @@
-"""
-monitor.py - Continuously tails and parses the Nginx JSON access log.
-Handles file rotation and inode changes by re-opening the file when needed.
-"""
-
 import json
 import time
 import os
+import subprocess
 
 
-def tail_log(log_file: str, callback):
-    """
-    Continuously tail the log file line by line.
-    Handles file rotation by detecting inode changes or file shrinkage.
-    """
+def tail_log(log_file, callback):
     while not os.path.exists(log_file):
-        print(f"[monitor] Waiting for log file: {log_file}")
+        print(f"[monitor] Waiting for log file: {log_file}", flush=True)
         time.sleep(2)
 
-    print(f"[monitor] Tailing log file: {log_file}")
+    print(f"[monitor] Tailing log file: {log_file}", flush=True)
 
-    with open(log_file, "r") as f:
-        f.seek(0, 2)
-        current_inode = os.stat(log_file).st_ino
+    try:
+        process = subprocess.Popen(
+            ["tail", "-F", "-n", "0", log_file],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
 
+        buf = b""
         while True:
-            line = f.readline()
-
-            if line:
-                parsed = parse_line(line.strip())
-                if parsed:
-                    callback(parsed)
+            chunk = process.stdout.read(1)
+            if chunk:
+                buf += chunk
+                if buf.endswith(b"\n"):
+                    line = buf.decode("utf-8", errors="replace").strip()
+                    buf = b""
+                    if line:
+                        parsed = parse_line(line)
+                        if parsed:
+                            print(f"[monitor] Entry: {parsed['source_ip']}", flush=True)
+                            callback(parsed)
             else:
-                time.sleep(0.1)
+                if process.poll() is not None:
+                    print("[monitor] tail process died. Restarting...", flush=True)
+                    break
+                time.sleep(0.01)
 
-                # Check if file has been rotated or recreated
-                try:
-                    new_inode = os.stat(log_file).st_ino
-                    new_size = os.path.getsize(log_file)
-                    current_pos = f.tell()
+    except Exception as e:
+        print(f"[monitor] Error: {e}", flush=True)
+    finally:
+        try:
+            process.terminate()
+        except Exception:
+            pass
 
-                    if new_inode != current_inode or new_size < current_pos:
-                        print("[monitor] File rotation/recreation detected. Reopening.")
-                        return tail_log(log_file, callback)
-
-                except FileNotFoundError:
-                    print("[monitor] Log file disappeared. Waiting...")
-                    time.sleep(2)
-                    return tail_log(log_file, callback)
+    time.sleep(1)
+    return tail_log(log_file, callback)
 
 
-def parse_line(line: str) -> dict:
-    """
-    Parse a single JSON log line into a structured dict.
-    Returns None if the line is not valid JSON or missing required fields.
-    """
+def parse_line(line):
+    if not line:
+        return None
     try:
         data = json.loads(line)
         source_ip = data.get("source_ip", "").split(",")[0].strip()

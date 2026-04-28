@@ -62,8 +62,10 @@ class Baseline:
             while self.per_second_errors and self.per_second_errors[0][0] < cutoff:
                 self.per_second_errors.popleft()
 
-            # Recalculate if interval has passed
-            if time.time() - self.last_recalc >= self.recalc_interval:
+            # Recalculate if interval has passed — always update last_recalc
+            now = time.time()
+            if now - self.last_recalc >= self.recalc_interval:
+                self.last_recalc = now  # Always update to prevent repeated attempts
                 self._recalculate()
 
     def _recalculate(self):
@@ -72,12 +74,13 @@ class Baseline:
         Update per-hour slots and prefer current hour if enough data.
         """
         now = time.time()
-        self.last_recalc = now
-
         counts = [c for _, c in self.per_second_counts]
         errors = [c for _, c in self.per_second_errors]
 
+        print(f"[baseline] Attempting recalculation: buckets={len(counts)} min_required={self.min_samples}")
+
         if len(counts) < self.min_samples:
+            print(f"[baseline] Not enough samples yet ({len(counts)}/{self.min_samples})")
             return
 
         # Compute mean and stddev for request rate
@@ -116,7 +119,7 @@ class Baseline:
         print(
             f"[baseline] Recalculated: mean={self.effective_mean:.4f} "
             f"stddev={self.effective_stddev:.4f} samples={len(counts)} "
-            f"hour={hour_key}"
+            f"hour={hour_key} hourly_slots={list(self.hourly_slots.keys())}"
         )
 
     def get(self) -> dict:
