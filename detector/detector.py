@@ -35,6 +35,10 @@ class Detector:
         # Track already-flagged IPs to avoid duplicate alerts
         self.flagged_ips = set()
 
+        # Global anomaly cooldown — only alert once per 60 seconds
+        self.last_global_alert = 0
+        self.global_alert_cooldown = 60
+
         self.lock = Lock()
 
     def record(self, entry: dict):
@@ -99,15 +103,17 @@ class Detector:
                     self.flagged_ips.add(ip)
                     self.on_ip_anomaly(ip, ip_rate, mean, condition)
 
-            # Check global anomaly
+            # Check global anomaly with cooldown
             global_zscore = (global_rate - mean) / stddev
             if global_zscore > zscore_thresh or global_rate > rate_thresh * mean:
-                condition = (
-                    f"zscore={global_zscore:.2f}>{zscore_thresh}"
-                    if global_zscore > zscore_thresh
-                    else f"rate={global_rate:.2f}>{rate_thresh}x mean={mean:.4f}"
-                )
-                self.on_global_anomaly(global_rate, mean, condition)
+                if now - self.last_global_alert >= self.global_alert_cooldown:
+                    self.last_global_alert = now
+                    condition = (
+                        f"zscore={global_zscore:.2f}>{zscore_thresh}"
+                        if global_zscore > zscore_thresh
+                        else f"rate={global_rate:.2f}>{rate_thresh}x mean={mean:.4f}"
+                    )
+                    self.on_global_anomaly(global_rate, mean, condition)
 
     def clear_flagged(self, ip: str):
         """Remove IP from flagged set when unbanned."""
