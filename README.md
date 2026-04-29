@@ -134,7 +134,7 @@ Dashboard shows:
 
 ## Blog Post
 
-Link: YOUR_BLOG_POST_URL
+Link: https://medium.com/@1phantagyro/building-a-real-time-ddos-detection-engine-from-scratch-7c9cf9651813
 
 ## Audit Log Format
 
